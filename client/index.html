@@ -8,7 +8,21 @@
 </head>
 
 <body>
-    <!-- Intentionally empty page per acceptance -->
+    <div id="lobbyContainer" style="display: flex; flex-direction: column; align-items: center; margin-top: 50px;">
+        <input id="roomIdInput" type="text" placeholder="Enter Room ID" style="margin-bottom: 10px;"/>
+        <button id="joinBtn">Join Room</button>
+        <button id="quickplayBtn" style="margin-top: 10px;">Quickplay</button>
+        <div id="lobbyInfo" style="margin-top: 20px; color: #222;"></div>
+        <div id="status" style="margin-top: 10px; color: green;"></div>
+    </div>
+    <div id="playerList" style="margin-top: 10px; color: #333;"></div>
+
+    <!-- GameScene area, hidden by default -->
+    <div id="gameScene" style="display:none; margin-top: 50px; text-align: center;">
+        <div id="gameStatus" style="color: green;"></div>
+        <div id="gamePlayers" style="margin-top: 10px; color: #333;"></div>
+    </div>
+
     <script type="module" src="./main.js"></script>
 </body>
 
