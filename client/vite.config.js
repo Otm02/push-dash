@@ -6,9 +6,18 @@ const __dirname = dirname(fileURLToPath(import.meta.url))
 
 export default defineConfig({
     root: __dirname,
+    resolve: {
+        alias: {
+            '@shared': fileURLToPath(new URL('../shared', import.meta.url))
+        }
+    },
     server: {
         port: 5173,
-        open: false
+        open: false,
+        fs: {
+            // allow importing from monorepo root (shared/)
+            allow: [fileURLToPath(new URL('..', import.meta.url))]
+        }
     },
     build: {
         outDir: 'dist'

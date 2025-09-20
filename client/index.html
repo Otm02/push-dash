@@ -8,8 +8,14 @@
 </head>
 
 <body>
-    <!-- Intentionally empty page per acceptance -->
-    <script type="module" src="./main.js"></script>
+    <div id="lobby" style="display:flex;gap:8px;align-items:center;padding:16px;">
+        <button id="quickplay">Quickplay</button>
+        <input id="roomIdInput" placeholder="Room ID" />
+        <button id="joinById">Join by ID</button>
+        <span id="status" style="margin-left:8px;color:#666"></span>
+    </div>
+    <div id="game"></div>
+    <script type="module" src="./src/main.js"></script>
 </body>
 
 </html>
