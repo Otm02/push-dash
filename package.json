@@ -1,0 +1,27 @@
+{
+  "name": "push-dash",
+  "private": true,
+  "version": "0.1.0",
+  "description": "Push Dash monorepo: Express + Colyseus server and Vite + Phaser client.",
+  "type": "module",
+  "scripts": {
+    "dev": "concurrently \"npm:dev:server\" \"npm:dev:client\"",
+    "dev:server": "nodemon server/index.js",
+    "dev:client": "vite --config client/vite.config.js",
+    "build": "vite build --config client/vite.config.js",
+    "start": "node server/index.js"
+  },
+  "devDependencies": {
+    "concurrently": "^8.2.2",
+    "nodemon": "^3.1.10",
+    "vite": "^5.4.20"
+  },
+  "dependencies": {
+    "@colyseus/schema": "^2.0.37",
+    "colyseus": "^0.15.57",
+    "colyseus.js": "^0.15.28",
+    "cors": "^2.8.5",
+    "express": "^4.21.2",
+    "phaser": "^3.90.0"
+  }
+}

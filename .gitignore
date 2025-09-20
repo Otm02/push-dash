@@ -1,3 +1,35 @@
+# Node
+node_modules/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+package-lock.json
+yarn.lock
+pnpm-lock.yaml
+
+# Logs
+logs
+*.log
+*.pid
+*.seed
+*.pid.lock
+
+# Vite
+dist/
+client/dist/
+.vite/
+*.local
+
+# Env
+.env
+.env.*
+!.env.example
+
+# OS / Editor
+.DS_Store
+.vscode/
+Thumbs.db
 # Logs
 logs
 *.log
