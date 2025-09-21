@@ -5,7 +5,18 @@ import Phaser from "phaser";
 class BulletHell extends Phaser.Scene {
 
 
-  preload() {}
+  preload() {
+    //images
+    this.load.image("knife", "assets/knife.png");
+    this.load.image("spike warning", "assets/spike warning.png");
+    this.load.image("spike", "assets/spike.png");
+
+    //sounds
+    this.load.audio("clank", "assets/metal-pipe.mp3");
+
+    //this.load.audio("spike", "assets/spike.mp3");
+
+  }
 
   create() {
 
@@ -16,7 +27,7 @@ class BulletHell extends Phaser.Scene {
     //keyboard arrows (phaser calls these cursor)
     this.cursors = this.input.keyboard.createCursorKeys();
 
-    //bullets (projectiles)
+    //bullets (projectiles knives) we are gonna have many knives, so we are adding them as a group, not like laser and trap
     this.bullets = this.physics.add.group();
 
     // Spawn projectiles every second
@@ -83,7 +94,10 @@ class BulletHell extends Phaser.Scene {
     }
 
     //create red square bullet
-    const bullet = this.add.rectangle(x, y, 8, 20, 0xf50c0c);
+    //const bullet = this.add.rectangle(x, y, 8, 20, 0xf50c0c);
+
+    //knife asset
+    const bullet = this.physics.add.image(x,y,"knife");    
     this.physics.add.existing(bullet);
     this.bullets.add(bullet);
 
@@ -101,6 +115,7 @@ class BulletHell extends Phaser.Scene {
    
     //collisions for bullet
     this.physics.add.overlap(this.player, this.bullets, () => {
+      this.sound.play("clank");
       this.scene.restart(); // reset scene
     });
 }
@@ -141,6 +156,7 @@ spawnLaser(){
 
         //collision
         this.physics.add.overlap(this.player, laser, () => {
+            this.sound.play("clank");
             this.scene.restart();
         });
 
@@ -154,23 +170,35 @@ spawnLaser(){
     spawnTraps(){
         const radius = 50;
         
+        //initially did a circle. now spike images
         //random position on the map, without being out of bounds. x+ = radius distance, max of edge-rad
         const x = Phaser.Math.Between(radius,800-radius);
         const y = Phaser.Math.Between(radius,600-radius);
 
         //telegraph
-        const telegraph = this.add.circle(x,y,radius, 0x45164f,0.25);
-        
+        //const telegraph = this.add.circle(x,y,radius, 0x45164f,0.25);
+
+        //spike image
+        const telegraph = this.physics.add.image(x,y,"spike warning");
+
         this.time.delayedCall(1000, () =>{
             telegraph.destroy();
 
-            const trap = this.add.circle(x,y,radius,0x9f11bf);
+            //trap
+            //const trap = this.add.circle(x,y,radius,0x9f11bf);
+
+            //spike image
+            const trap = this.physics.add.image(x,y,"spike");
             this.physics.add.existing(trap,true);
 
+            //collision
             this.physics.add.overlap(this.player,trap, ()=>{
+                this.sound.play("clank");
                 this.scene.restart();
             });
 
+
+            //del trap
             this.time.delayedCall(4000, ()=> trap.destroy());
 
         })
