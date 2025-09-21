@@ -97,5 +97,12 @@ export function bindHazards(scene, hazardMap) {
     }
     scene.events.on('update', onUpdate)
 
-    return { dispose }
+    // Clear all current hazard visuals but keep listeners active for future updates
+    const clear = () => {
+        nodesById.forEach(g => g.destroy())
+        nodesById.clear()
+        prevById.clear()
+    }
+
+    return { dispose, clear }
 }

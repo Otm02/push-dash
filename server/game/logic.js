@@ -17,11 +17,13 @@ function circleRectOverlap(cx, cy, r, rx, ry, rw, rh) {
 
 export function resolveDeaths(room, hazCtrl) {
     const players = room.state.players
+    const killedIds = []
+    const doKill = (player, id, cause) => kill(room, player, id, cause, killedIds)
     players.forEach((p, id) => {
         if (!p.alive) return
         // OOB
         if (p.x < 0 || p.x > ARENA_W || p.y < 0 || p.y > ARENA_H) {
-            kill(room, p, id, 'oob')
+            doKill(p, id, 'oob')
             return
         }
         // Hazards
@@ -31,29 +33,30 @@ export function resolveDeaths(room, hazCtrl) {
                 if (!lethal) continue
                 for (const r of hz.rects) {
                     if (aabbOverlap(p.x, p.y, PLAYER_SIZE, PLAYER_SIZE, r.x, r.y, r.w, r.h)) {
-                        kill(room, p, id, 'laser')
+                        doKill(p, id, 'laser')
                         return
                     }
                 }
             } else if (hz.type === 'dagger') {
                 const r = (hz.r ?? (Math.max(hz.w || 0, hz.h || 0) / 2)) || 8
                 if (circleRectOverlap(hz.x, hz.y, r, p.x, p.y, PLAYER_SIZE, PLAYER_SIZE)) {
-                    kill(room, p, id, 'dagger')
+                    doKill(p, id, 'dagger')
                     return
                 }
             } else if (hz.type === 'trap') {
                 const lethal = hz.phase === 'lethal'
                 if (!lethal) continue
                 if (aabbOverlap(p.x, p.y, PLAYER_SIZE, PLAYER_SIZE, hz.x, hz.y, hz.w, hz.h)) {
-                    kill(room, p, id, 'trap')
+                    doKill(p, id, 'trap')
                     return
                 }
             }
         }
     })
+    return killedIds
 }
 
-function kill(room, player, id, cause) {
+function kill(room, player, id, cause, killedIds) {
     player.alive = false
     player.vx = 0
     player.vy = 0
@@ -64,4 +67,5 @@ function kill(room, player, id, cause) {
     if (d) d.active = false
     // emit event for UI
     try { room.broadcast('playerDied', { id, cause }) } catch { }
+    if (Array.isArray(killedIds)) killedIds.push(id)
 }

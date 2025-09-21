@@ -1,5 +1,5 @@
 import Phaser from 'phaser'
-import { ARENA_W, ARENA_H, MAX_SPEED, PLAYER_HALF, PLAYER_SIZE, TICK_MS } from '@shared/constants.js'
+import { ARENA_W, ARENA_H, MAX_SPEED, PLAYER_HALF, PLAYER_SIZE, TICK_MS, DASH_HOLD_THRESHOLD_MS } from '@shared/constants.js'
 import { bindHazards } from './hazards.js'
 
 const SELF_COLOR = 0x4caf50
@@ -21,6 +21,11 @@ export class GameScene extends Phaser.Scene {
         this._selfCorrection = 0.08
         this.localDead = false
         this.deathText = null
+        this.phaseText = null
+        this._localDash = { active: false, dir: { x: 0, y: 0 }, until: 0 }
+        this.timerText = null
+        this.waveText = null
+        this.hazardBinding = null
     }
 
     preload() {
@@ -63,12 +68,15 @@ export class GameScene extends Phaser.Scene {
         // Hook to state changes to create/update/destroy player squares
         this._bindState()
         // Render hazards from state deterministically
-        bindHazards(this, this.room.state.hazards)
+        this.hazardBinding = bindHazards(this, this.room.state.hazards)
 
         // Listen for death events to provide UX feedback and stop local control
         if (this.room && typeof this.room.onMessage === 'function') {
             this.room.onMessage('playerDied', (payload) => {
                 if (!payload || !payload.id) return
+                // Remove sprite immediately for responsiveness
+                const rect = this.sprites.get(payload.id)
+                if (rect) { rect.destroy(); this.sprites.delete(payload.id); this.targets.delete(payload.id) }
                 if (payload.id === this.room.sessionId) {
                     this.localDead = true
                     if (!this.deathText) {
@@ -82,6 +90,30 @@ export class GameScene extends Phaser.Scene {
                     }
                 }
             })
+            // On new game start, clear death UI, clear hazards, and snap sprites to server spawns
+            this.room.onMessage('gameStart', (payload) => {
+                this.localDead = false
+                if (this.deathText) { this.deathText.destroy(); this.deathText = null }
+                // clear client-predicted dash state
+                this._localDash.active = false
+                // clear hazard visuals immediately; new hazards will stream in via state
+                try { this.hazardBinding?.clear?.() } catch { }
+                // ensure sprites exist for all players
+                this.room.state.players.forEach((p, id) => {
+                    this._ensureSprite(id, p)
+                    const spawn = payload?.spawns?.[id] || { x: p.x, y: p.y }
+                    // snap sprite to server-provided spawn to avoid interpolation from prior round
+                    const rect = this.sprites.get(id)
+                    if (rect) {
+                        rect.x = spawn.x
+                        rect.y = spawn.y
+                    }
+                    this.targets.set(id, { x: spawn.x, y: spawn.y })
+                    if (id === this.room.sessionId) {
+                        this.selfServerPos = { x: spawn.x, y: spawn.y }
+                    }
+                })
+            })
         }
 
         // Input keys
@@ -93,6 +125,49 @@ export class GameScene extends Phaser.Scene {
             shift: Phaser.Input.Keyboard.KeyCodes.SHIFT,
             space: Phaser.Input.Keyboard.KeyCodes.SPACE,
         })
+        // Track dash hold timing
+        this._dashHold = { isDown: false, startedAt: 0 }
+
+        // Phase overlay
+        const updatePhaseOverlay = () => {
+            const phase = this.room.state.phase
+            if (phase !== 'running') {
+                if (!this.phaseText) {
+                    this.phaseText = this.add.text(this.scale.width / 2, 40, 'Lobby: get ready...', {
+                        fontSize: '20px', color: '#ddd', fontStyle: 'bold'
+                    }).setOrigin(0.5)
+                    this.phaseText.setScrollFactor(0)
+                    this.phaseText.setDepth(1000)
+                }
+                this.phaseText.setText('Lobby: get ready...')
+                this.localDead = false
+                if (this.timerText) { this.timerText.destroy(); this.timerText = null }
+                if (this.waveText) { this.waveText.destroy(); this.waveText = null }
+            } else {
+                if (this.phaseText) { this.phaseText.destroy(); this.phaseText = null }
+                if (!this.timerText) {
+                    this.timerText = this.add.text(8, 8, 'Time: 0s', { fontSize: '16px', color: '#eee' })
+                    this.timerText.setScrollFactor(0)
+                    this.timerText.setDepth(1000)
+                }
+                if (!this.waveText) {
+                    this.waveText = this.add.text(8, 28, 'Wave: 1', { fontSize: '16px', color: '#eee' })
+                    this.waveText.setScrollFactor(0)
+                    this.waveText.setDepth(1000)
+                }
+            }
+        }
+        if (typeof this.room.state.onChange === 'function') {
+            this.room.state.onChange(updatePhaseOverlay)
+        }
+        updatePhaseOverlay()
+        // Keep timer/wave text updated each frame
+        this.events.on('update', () => {
+            if (this.room.state.phase === 'running') {
+                if (this.timerText) this.timerText.setText(`Time: ${Math.max(0, this.room.state.roundTimer) | 0}s`)
+                if (this.waveText) this.waveText.setText(`Wave: ${this.room.state.wave | 0}`)
+            }
+        })
     }
 
     _bindState() {
@@ -101,9 +176,7 @@ export class GameScene extends Phaser.Scene {
         state.players.forEach((p, id) => this._ensureSprite(id, p))
 
         // Subscribe using MapSchema event methods
-        state.players.onAdd((p, id) => {
-            this._ensureSprite(id, p)
-        })
+        state.players.onAdd((p, id) => { this._ensureSprite(id, p) })
         state.players.onChange((p, id) => {
             this._updateSprite(id, p)
         })
@@ -139,6 +212,12 @@ export class GameScene extends Phaser.Scene {
     _updateSprite(id, player) {
         const rect = this.sprites.get(id)
         if (!rect) return
+        if (player.alive === false) {
+            rect.destroy()
+            this.sprites.delete(id)
+            this.targets.delete(id)
+            return
+        }
         // Store latest server positions as targets
         this.targets.set(id, { x: player.x, y: player.y })
         if (id === this.room.sessionId) {
@@ -154,7 +233,8 @@ export class GameScene extends Phaser.Scene {
         const dt = delta / 1000
         const selfId = this.room.sessionId
         const selfRect = this.sprites.get(selfId)
-        if (selfRect && !this.localDead) {
+        const phaseRunning = this.room.state.phase === 'running'
+        if (selfRect && !this.localDead && phaseRunning) {
             // Immediate local movement (prediction)
             let dx = 0, dy = 0
             if (this.keys.w.isDown) dy -= 1
@@ -165,20 +245,74 @@ export class GameScene extends Phaser.Scene {
             if (!this._dashPrev) this._dashPrev = { shift: false, space: false }
             const nowShift = this.keys.shift.isDown
             const nowSpace = this.keys.space.isDown
-            const dashPressed = (!this._dashPrev.shift && nowShift) || (!this._dashPrev.space && nowSpace)
+            // hold timing: start on key down, trigger long during hold, short on release if long not fired
+            const dashWentDown = (!this._dashPrev.shift && nowShift) || (!this._dashPrev.space && nowSpace)
+            const dashWentUp = (this._dashPrev.shift && !nowShift) || (this._dashPrev.space && !nowSpace)
+            if (dashWentDown) {
+                this._dashHold.isDown = true
+                this._dashHold.startedAt = performance.now()
+                this._dashHold.longFired = false
+            }
+            let dashPressed = false
+            let dashType = undefined
+            // Fire long dash once when threshold exceeded while still holding
+            if (this._dashHold.isDown && !this._dashHold.longFired) {
+                const held = performance.now() - this._dashHold.startedAt
+                if (held >= DASH_HOLD_THRESHOLD_MS) {
+                    dashType = 'long'
+                    dashPressed = true
+                    this._dashHold.longFired = true
+                    // start local dash prediction immediately
+                    const len = Math.hypot(dx, dy) || 1
+                    const dirx = dx / len, diry = dy / len
+                    this._localDash.active = true
+                    this._localDash.dir.x = dirx
+                    this._localDash.dir.y = diry
+                    // assume long duration locally (ms)
+                    this._localDash.until = performance.now() + 1000
+                }
+            }
+            // On release: if long didn't fire, trigger short
+            if (!dashPressed && dashWentUp && this._dashHold.isDown) {
+                if (!this._dashHold.longFired) {
+                    dashType = 'short'
+                    dashPressed = true
+                    const len = Math.hypot(dx, dy) || 1
+                    const dirx = dx / len, diry = dy / len
+                    this._localDash.active = true
+                    this._localDash.dir.x = dirx
+                    this._localDash.dir.y = diry
+                    // assume short duration locally (ms)
+                    this._localDash.until = performance.now() + 250
+                }
+                this._dashHold.isDown = false
+                this._dashHold.longFired = false
+            }
             this._dashPrev.shift = nowShift
             this._dashPrev.space = nowSpace
             if (dashPressed) {
                 // queue and also send immediately to reduce latency
                 this._dashPending = true
-                this.room.send('input', { dx, dy, dashPressed: true, t: Date.now() })
+                this._pendingDashType = dashType
+                this.room.send('input', { dx, dy, dashPressed: true, dashType, t: Date.now() })
             }
             if (dx !== 0 || dy !== 0) {
                 const len = Math.hypot(dx, dy)
                 dx /= len
                 dy /= len
-                selfRect.x += dx * MAX_SPEED * dt
-                selfRect.y += dy * MAX_SPEED * dt
+                // If not dashing locally, apply normal movement prediction
+                if (!this._localDash.active) {
+                    selfRect.x += dx * MAX_SPEED * dt
+                    selfRect.y += dy * MAX_SPEED * dt
+                }
+            }
+            // Apply local dash prediction
+            if (this._localDash.active) {
+                const nowt = performance.now()
+                const step = 400 * dt
+                selfRect.x += this._localDash.dir.x * step
+                selfRect.y += this._localDash.dir.y * step
+                if (nowt >= this._localDash.until) this._localDash.active = false
             }
             // Clamp to arena bounds
             selfRect.x = Phaser.Math.Clamp(selfRect.x, PLAYER_HALF, ARENA_W - PLAYER_HALF)
@@ -194,8 +328,10 @@ export class GameScene extends Phaser.Scene {
             if (this._sendAcc >= this._sendRateMs) {
                 this._sendAcc = 0
                 const oneShot = this._dashPending === true
-                this.room.send('input', { dx, dy, dashPressed: oneShot, t: Date.now() })
+                const dashTypeSend = oneShot ? (this._pendingDashType || undefined) : undefined
+                this.room.send('input', { dx, dy, dashPressed: oneShot, dashType: dashTypeSend, t: Date.now() })
                 this._dashPending = false
+                this._pendingDashType = undefined
             }
         }
 

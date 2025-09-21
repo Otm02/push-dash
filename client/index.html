@@ -8,11 +8,29 @@
 </head>
 
 <body>
-    <div id="lobby" style="display:flex;gap:8px;align-items:center;padding:16px;">
+    <div id="lobby" style="display:flex;gap:8px;align-items:center;padding:16px;flex-wrap:wrap;">
+        <input id="nameInput" placeholder="Name (optional)" style="min-width:160px;" />
         <button id="quickplay">Quickplay</button>
         <input id="roomIdInput" placeholder="Room ID" />
         <button id="joinById">Join by ID</button>
         <span id="status" style="margin-left:8px;color:#666"></span>
+    </div>
+    <div id="hud" style="position:fixed;top:8px;left:8px;z-index:1000;display:none;">
+        <button id="readyBtn" style="margin-right:8px;">Ready</button>
+        <span id="readyInfo" style="color:#bbb;margin-right:12px;"></span>
+        <span id="scoreInfo" style="color:#ddd;"></span>
+    </div>
+    <div id="gameover"
+        style="position:fixed;inset:0;display:none;align-items:center;justify-content:center;background:rgba(0,0,0,0.5);z-index:2000;">
+        <div style="background:#222;padding:16px 24px;border-radius:8px;color:#eee;min-width:340px;text-align:center;">
+            <div id="winnerText" style="font-size:20px;margin-bottom:12px;">Winner: -</div>
+            <div id="scoreBoard" style="font-size:14px;margin-bottom:12px;color:#ccc;white-space:pre-line;"></div>
+            <div id="rematchInfo" style="font-size:14px;margin-bottom:12px;color:#bbb;">Rematch: 0 / 0</div>
+            <div style="display:flex;gap:8px;justify-content:center;">
+                <button id="rematchBtn">Rematch</button>
+                <button id="menuBtn">Main Menu</button>
+            </div>
+        </div>
     </div>
     <div id="game"></div>
     <script type="module" src="./src/main.js"></script>

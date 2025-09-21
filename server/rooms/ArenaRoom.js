@@ -1,7 +1,7 @@
 import colyseus from 'colyseus'
 const { Room } = colyseus
 import { Schema, MapSchema, ArraySchema, defineTypes } from '@colyseus/schema'
-import { ARENA_W, ARENA_H, MAX_SPEED, PLAYER_HALF, DASH_SPEED, DASH_DURATION_MS, DASH_COOLDOWN_MS, STUN_MS, RECOIL_MS, RECOIL_SPEED_SCALE, KNOCKBACK_SCALE, TICK_MS } from '../../shared/constants.js'
+import { ARENA_W, ARENA_H, MAX_SPEED, PLAYER_HALF, DASH_SPEED, DASH_SHORT_DURATION_MS, DASH_LONG_DURATION_MS, DASH_COOLDOWN_MS, STUN_MS, RECOIL_MS, RECOIL_SPEED_SCALE, KNOCKBACK_SCALE, TICK_MS, WAVE_SECONDS } from '../../shared/constants.js'
 import { makeHazards, stepHazards, resolvePlayerHazard, serializeHazards } from '../game/hazards.js'
 import { resolveDeaths } from '../game/logic.js'
 
@@ -58,6 +58,7 @@ class Player extends Schema {
         this.vx = 0
         this.vy = 0
         this.alive = true
+        this.ready = false
     }
 }
 defineTypes(Player, {
@@ -71,6 +72,7 @@ defineTypes(Player, {
     vx: 'number',
     vy: 'number',
     alive: 'boolean',
+    ready: 'boolean',
 })
 
 class ArenaState extends Schema {
@@ -81,6 +83,10 @@ class ArenaState extends Schema {
         this.phase = 'lobby' // lobby | running | gameover
         this.seed = Math.floor(Math.random() * 1e9)
         this.roundTimer = 0
+        this.winnerId = ''
+        this.rematchYes = new MapSchema()
+        this.scores = new MapSchema()
+        this.wave = 1
     }
 }
 defineTypes(ArenaState, {
@@ -89,6 +95,10 @@ defineTypes(ArenaState, {
     phase: 'string',
     seed: 'number',
     roundTimer: 'number',
+    winnerId: 'string',
+    rematchYes: { map: 'boolean' },
+    scores: { map: 'number' },
+    wave: 'number',
 })
 
 export class ArenaRoom extends Room {
@@ -113,7 +123,11 @@ export class ArenaRoom extends Room {
             getPlayers: () => Array.from(this.state.players.values())
         })
         this.clock.setInterval(() => {
-            this.state.roundTimer += 1
+            if (this.state.phase === 'running') {
+                this.state.roundTimer += 1
+                const w = Math.floor(this.state.roundTimer / (WAVE_SECONDS || 20)) + 1
+                if (w !== this.state.wave) this.state.wave = w
+            }
         }, 1000)
 
         // handle input messages
@@ -123,12 +137,16 @@ export class ArenaRoom extends Room {
             const mag = Math.hypot(dx, dy)
             if (mag > 0) { dx /= mag; dy /= mag }
             const dashPressed = !!(data?.dashPressed ?? data?.dash)
-            this.inputs.set(client.sessionId, { dx, dy, dashPressed })
+            const dashType = (data?.dashType === 'short' || data?.dashType === 'long') ? data.dashType : undefined
+            this.inputs.set(client.sessionId, { dx, dy, dashPressed, dashType })
         })
 
-        // simulation tick: movement integration
+        // simulation tick: movement integration (only when running)
         const tickMs = TICK_MS
         this.clock.setInterval(() => {
+            if (this.state.phase !== 'running') {
+                return
+            }
             const dt = tickMs / 1000
             const now = Date.now()
             // Step hazards and sync into state
@@ -153,7 +171,8 @@ export class ArenaRoom extends Room {
                     const dirMag = Math.hypot(inp.dx, inp.dy)
                     if (dirMag > 0) {
                         const dir = { x: inp.dx / dirMag, y: inp.dy / dirMag }
-                        dstate = { active: true, dir, endAt: now + DASH_DURATION_MS }
+                        const dur = (inp.dashType === 'short') ? DASH_SHORT_DURATION_MS : DASH_LONG_DURATION_MS
+                        dstate = { active: true, dir, endAt: now + dur, type: (inp.dashType || 'long') }
                         this.dash.set(id, dstate)
                         p.cooldownMs = DASH_COOLDOWN_MS
                     }
@@ -225,6 +244,7 @@ export class ArenaRoom extends Room {
                 for (let j = i + 1; j < ids.length; j++) {
                     const a = this.state.players.get(ids[i])
                     const b = this.state.players.get(ids[j])
+                    if (!a.alive || !b.alive) continue
                     const dx = b.x - a.x
                     const dy = b.y - a.y
                     const minDist = PLAYER_HALF * 2
@@ -248,12 +268,63 @@ export class ArenaRoom extends Room {
             // Allow overlaps: no pushback resolution vs hazards; death logic will handle kills
 
             // Death resolution (OOB, lasers, daggers, traps)
-            resolveDeaths(this, this.haz)
+            const killedNow = resolveDeaths(this, this.haz)
+            // If everyone is dead, determine winner (last to die among this round)
+            let aliveCount = 0
+            this.state.players.forEach(p => { if (p.alive) aliveCount++ })
+            if (aliveCount === 0) {
+                // winner is the last ID in killedNow, if present; else fallback to previous alive
+                const lastKilled = Array.isArray(killedNow) && killedNow.length > 0 ? killedNow[killedNow.length - 1] : ''
+                this.state.winnerId = lastKilled
+                // increment winner score
+                if (this.state.winnerId) {
+                    const prev = Number(this.state.scores.get(this.state.winnerId) || 0)
+                    this.state.scores.set(this.state.winnerId, prev + 1)
+                }
+                this.state.phase = 'gameover'
+                // Include snapshot of scores for immediate client display
+                const scoreSnapshot = {}
+                this.state.scores.forEach((v, k) => { scoreSnapshot[k] = v })
+                try { this.broadcast('gameOver', { winnerId: this.state.winnerId, scores: scoreSnapshot, wave: this.state.wave, time: this.state.roundTimer }) } catch { }
+            }
         }, tickMs)
         console.log(`[ArenaRoom] created with options`, options)
+
+        // Ready toggle from clients (only in lobby)
+        this.onMessage('ready', (client, data) => {
+            if (this.state.phase !== 'lobby') return
+            const p = this.state.players.get(client.sessionId)
+            if (!p) return
+            const val = typeof data?.ready === 'boolean' ? !!data.ready : !p.ready
+            p.ready = val
+            this._startIfReady()
+        })
+
+        // Rematch voting: consent required by all current players
+        this.onMessage('rematch', (client) => {
+            if (this.state.phase !== 'gameover') return
+            // record vote
+            this.state.rematchYes.set(client.sessionId, true)
+            this._broadcastRematchStatus()
+            this._maybeStartRematch()
+        })
+
+        // Return to main menu (client will leave room). Optionally update name before leaving.
+        this.onMessage('setName', (client, data) => {
+            const name = String(data?.name || '').trim()
+            if (!name) return
+            const p = this.state.players.get(client.sessionId)
+            if (p) p.name = name
+        })
     }
 
     onJoin(client, options) {
+        // Prevent joining mid-game (only allow joins during lobby phase)
+        if (this.state.phase !== 'lobby') {
+            try { client.error(4000, 'Game already started') } catch { }
+            try { client.leave(4000, 'Game already started') } catch { }
+            return
+        }
         const p = new Player()
         p.id = client.sessionId
         p.name = options?.name || `Player-${client.sessionId.slice(0, 4)}`
@@ -268,13 +339,24 @@ export class ArenaRoom extends Room {
         const available = this.PALETTE.find((c) => !used.has(c))
         p.color = available ?? this.PALETTE[0]
         this.state.players.set(client.sessionId, p)
+        // initialize score for new player if not present
+        if (!this.state.scores.has(client.sessionId)) this.state.scores.set(client.sessionId, 0)
         console.log(`[ArenaRoom] join ${client.sessionId}`)
+        // check autostart conditions each join (in case others already ready)
+        if (this.state.phase === 'lobby') this._startIfReady()
     }
 
     onLeave(client, consented) {
         this.state.players.delete(client.sessionId)
         this.inputs?.delete(client.sessionId)
         console.log(`[ArenaRoom] leave ${client.sessionId} consented=${consented}`)
+        if (this.state.phase === 'lobby') this._startIfReady()
+        // cleanup vote and re-evaluate during gameover
+        if (this.state.phase === 'gameover') {
+            if (this.state.rematchYes.has(client.sessionId)) this.state.rematchYes.delete(client.sessionId)
+            this._broadcastRematchStatus()
+            this._maybeStartRematch()
+        }
     }
 
     onDispose() {
@@ -291,6 +373,79 @@ export class ArenaRoom extends Room {
         // Upsert current
         for (const [k, v] of ser) {
             this.state.hazards.set(k, v)
+        }
+    }
+
+    _startIfReady() {
+        if (this.state.phase !== 'lobby') return
+        const players = Array.from(this.state.players.values())
+        const n = players.length
+        if (n < 2 || n > 4) return
+        const allReady = players.every(p => !!p.ready)
+        if (!allReady) return
+        this._startGame()
+    }
+
+    _startGame() {
+        // reset seed/hazards
+        this.state.seed = Math.floor(Math.random() * 1e9)
+        this.haz = makeHazards(0, {
+            seed: this.state.seed,
+            arena: { w: ARENA_W, h: ARENA_H },
+            getPlayers: () => Array.from(this.state.players.values())
+        })
+        // clear existing hazards in state map
+        const keys = []
+        this.state.hazards.forEach((_v, k) => keys.push(k))
+        for (const k of keys) this.state.hazards.delete(k)
+        this._syncHazardsToState()
+        // Reset players to fresh round state
+        this.state.players.forEach((p, id) => {
+            p.alive = true
+            p.stunMs = 0
+            p.cooldownMs = 0
+            p.vx = 0
+            p.vy = 0
+            // random spawn
+            p.x = Math.floor(Math.random() * ARENA_W)
+            p.y = Math.floor(Math.random() * ARENA_H)
+        })
+        // clear ephemeral input/dash/recoil
+        this.inputs = new Map()
+        this.dash = new Map()
+        this.recoilUntil = new Map()
+        this.state.roundTimer = 0
+        this.state.wave = 1
+        this.state.winnerId = ''
+        // clear rematch votes
+        const toClear = []
+        this.state.rematchYes.forEach((_v, k) => toClear.push(k))
+        for (const k of toClear) this.state.rematchYes.delete(k)
+        this.state.phase = 'running'
+        // Build spawn snapshot for clients to snap immediately
+        const spawns = {}
+        this.state.players.forEach((p, id) => { spawns[id] = { x: p.x, y: p.y } })
+        try { this.broadcast('gameStart', { t: Date.now(), spawns }) } catch { }
+    }
+
+    _broadcastRematchStatus() {
+        try {
+            const voters = []
+            this.state.rematchYes.forEach((_v, k) => voters.push(k))
+            this.broadcast('rematchStatus', { yes: voters, total: this.state.players.size })
+        } catch { }
+    }
+
+    _maybeStartRematch() {
+        if (this.state.phase !== 'gameover') return
+        const total = this.state.players.size
+        if (total < 2 || total > 4) return
+        // if every current player has voted yes
+        let yesCount = 0
+        this.state.players.forEach((_p, id) => { if (this.state.rematchYes.get(id)) yesCount++ })
+        if (yesCount === total) {
+            // immediate new round
+            this._startGame()
         }
     }
 }
