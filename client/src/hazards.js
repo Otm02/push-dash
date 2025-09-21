@@ -1,5 +1,6 @@
 // Client-side hazard renderer: bind to state.hazards (MapSchema<string>)
 // and draw simple Phaser Graphics for lasers, daggers, and traps deterministically.
+// Textures are preloaded in GameScene via Vite-imported assets.
 
 export function bindHazards(scene, hazardMap) {
     const nodesById = new Map() // id -> display object

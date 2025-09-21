@@ -1,6 +1,14 @@
 import Phaser from 'phaser'
 import { ARENA_W, ARENA_H, MAX_SPEED, PLAYER_HALF, PLAYER_SIZE, TICK_MS, DASH_HOLD_THRESHOLD_MS } from '@shared/constants.js'
 import { bindHazards } from './hazards.js'
+// Vite asset imports ensure files are bundled to dist
+import knifePng from '../assets/knife.png'
+import spikeWarnPng from '../assets/spike warning.png'
+import spikePng from '../assets/spike.png'
+import sfxKnife from '../assets/Knife.mp3'
+import sfxLaserDeath from '../assets/laser death.mp3'
+import sfxLaserWah from '../assets/laser wah.mp3'
+import sfxSpike from '../assets/Spike.mp3'
 
 const SELF_COLOR = 0x4caf50
 const OTHER_COLOR = 0x03a9f4
@@ -30,15 +38,15 @@ export class GameScene extends Phaser.Scene {
     }
 
     preload() {
-        // Hazard assets
-        this.load.image('knife', 'assets/knife.png')
-        this.load.image('spike-warning', 'assets/spike warning.png')
-        this.load.image('spike', 'assets/spike.png')
+        // Hazard assets (use imported URLs so Vite includes them in dist)
+        this.load.image('knife', knifePng)
+        this.load.image('spike-warning', spikeWarnPng)
+        this.load.image('spike', spikePng)
         // Audio assets
-        this.load.audio('sfx-knife', 'assets/Knife.mp3')
-        this.load.audio('sfx-laser-death', 'assets/laser death.mp3')
-        this.load.audio('sfx-laser-wah', 'assets/laser wah.mp3')
-        this.load.audio('sfx-spike', 'assets/Spike.mp3')
+        this.load.audio('sfx-knife', sfxKnife)
+        this.load.audio('sfx-laser-death', sfxLaserDeath)
+        this.load.audio('sfx-laser-wah', sfxLaserWah)
+        this.load.audio('sfx-spike', sfxSpike)
     }
 
     create() {
