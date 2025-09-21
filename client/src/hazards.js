@@ -19,6 +19,13 @@ export function bindHazards(scene, hazardMap) {
             for (const r of rects) {
                 gfx.fillRect(r.x - r.w / 2, r.y - r.h / 2, r.w, r.h)
             }
+
+            //laser sound
+             if (hz.phase === 'lethal' && !gfx._playedSound) {
+                scene.sound.play('laser')
+                gfx._playedSound = true //gfx here as it is dynamic with the potential laser waves later.
+    }
+
         } else if (hz.type === 'dagger') {
             const sprite = node
             sprite.setTexture('knife')
@@ -32,6 +39,12 @@ export function bindHazards(scene, hazardMap) {
             const key = hz.phase === 'telegraph' ? 'spike-warning' : 'spike'
             sprite.setTexture(key)
             sprite.setPosition(hz.x, hz.y)
+
+            //sound for spike
+            if (hz.phase === 'lethal' && !sprite._playedSound) {
+                scene.sound.play('spike')
+                sprite._playedSound = true //sprite here as not dynamic like rectangle earlier
+    }
         }
     }
 

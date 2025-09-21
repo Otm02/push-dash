@@ -33,14 +33,14 @@ export function makeHazards(initialCount = 0, opts = {}) {
         list: [],
         // base spawn delays (seconds)
         baseDelays: {
-            laser: 4.0,
-            dagger: 0.9,
-            trap: 3.0,
+            laser: 8.0,
+            dagger: 1.5,
+            trap: 2.0,
         },
         timers: {
-            laser: 1.0,
-            dagger: 0.2,
-            trap: 1.5,
+            laser: 10.0,
+            dagger: 5.0,
+            trap: 15.0,
         },
     }
     for (let i = 0; i < initialCount; i++) {
@@ -84,7 +84,7 @@ function makeLaser(ctrl) {
         id: newId(ctrl),
         type: 'laser',
         phase: 'telegraph', // telegraph -> lethal -> off -> done
-        t: 0.8, // telegraph duration
+        t: 2.0, // telegraph duration
         lethalFor: randRange(ctrl.rng, 1.2, 2.0),
         offFor: 0.3,
         rects,
@@ -153,7 +153,7 @@ function makeTrap(ctrl) {
         alive: true,
     }
 }
-
+// logic on hazards here
 export function stepHazards(ctrl, dt) {
     ctrl.elapsed += dt
     const mult = rampMultiplier(ctrl.elapsed)

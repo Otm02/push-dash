@@ -25,9 +25,13 @@ export class GameScene extends Phaser.Scene {
 
     preload() {
         // Hazard assets
-        this.load.image('knife', 'assets/knife.png')
-        this.load.image('spike-warning', 'assets/spike warning.png')
-        this.load.image('spike', 'assets/spike.png')
+        this.load.image('knife', 'assets/knife.png');
+        this.load.image('spike-warning', 'assets/spike warning.png');
+        this.load.image('spike', 'assets/spike.png');
+
+        //sound
+        this.load.audio("spike", 'assets/Spike.mp3');
+        this.load.audio("laser", "assets/laser wah.mp3")
     }
 
     create() {
