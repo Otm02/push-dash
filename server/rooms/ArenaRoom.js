@@ -421,11 +421,20 @@ export class ArenaRoom extends Room {
         const toClear = []
         this.state.rematchYes.forEach((_v, k) => toClear.push(k))
         for (const k of toClear) this.state.rematchYes.delete(k)
-        this.state.phase = 'running'
+        // Enter starting phase with a short countdown before simulation begins
+        this.state.phase = 'starting'
         // Build spawn snapshot for clients to snap immediately
         const spawns = {}
         this.state.players.forEach((p, id) => { spawns[id] = { x: p.x, y: p.y } })
-        try { this.broadcast('gameStart', { t: Date.now(), spawns }) } catch { }
+        try { this.broadcast('preStart', { t: Date.now(), spawns, count: 3 }) } catch { }
+        // After countdown, set running and notify clients
+        this.clock.setTimeout(() => {
+            // Guard in case room disposed or phase changed
+            if (!this.state) return
+            if (this.state.phase !== 'starting') return
+            this.state.phase = 'running'
+            try { this.broadcast('gameStart', { t: Date.now(), spawns }) } catch { }
+        }, 3000)
     }
 
     _broadcastRematchStatus() {

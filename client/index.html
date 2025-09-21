@@ -4,35 +4,65 @@
 <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>push-dash</title>
+    <title>PUSH//DASH</title>
+    <meta name="description" content="PUSH//DASH – a fast-paced, neon-arena brawler. Dash, collide, survive." />
+    <link rel="stylesheet" href="./assets/styles.css" />
 </head>
 
 <body>
-    <div id="lobby" style="display:flex;gap:8px;align-items:center;padding:16px;flex-wrap:wrap;">
-        <input id="nameInput" placeholder="Name (optional)" style="min-width:160px;" />
-        <button id="quickplay">Quickplay</button>
-        <input id="roomIdInput" placeholder="Room ID" />
-        <button id="joinById">Join by ID</button>
-        <span id="status" style="margin-left:8px;color:#666"></span>
+    <div class="bg"></div>
+
+
+
+    <div class="shell">
+        <div class="card">
+            <div class="leftStack">
+                <div class="hero">
+                    <h1>PUSH<span class="sep">//</span>DASH</h1>
+                    <p>Ready up with friends and collide in a minimalist neon arena. Short taps, long dashes—master
+                        momentum.</p>
+                    <div class="cta-row">
+                        <input id="nameInput" class="input" placeholder="Your Name (optional)" />
+                        <button id="quickplay" class="btn">Quickplay</button>
+                    </div>
+                </div>
+                <div class="panel">
+                    <h3>Join a Room</h3>
+                    <div class="row">
+                        <input id="roomIdInput" class="input" placeholder="Room ID" />
+                        <button id="joinById" class="btn secondary">Join by ID</button>
+                    </div>
+                    <div class="row">
+                        <span id="status" class="hint"></span>
+                    </div>
+                </div>
+                <div id="hud">
+                    <div class="readyOnly"><button id="readyBtn" class="btn">Ready</button></div>
+                    <div class="statusPanel">
+                        <span id="readyInfo"></span>
+                        <span id="scoreInfo"></span>
+                    </div>
+                </div>
+            </div>
+            <div class="rightArena">
+                <div id="game"></div>
+            </div>
+        </div>
+        <div id="lobby" style="display:none"></div>
     </div>
-    <div id="hud" style="position:fixed;top:8px;left:8px;z-index:1000;display:none;">
-        <button id="readyBtn" style="margin-right:8px;">Ready</button>
-        <span id="readyInfo" style="color:#bbb;margin-right:12px;"></span>
-        <span id="scoreInfo" style="color:#ddd;"></span>
-    </div>
-    <div id="gameover"
-        style="position:fixed;inset:0;display:none;align-items:center;justify-content:center;background:rgba(0,0,0,0.5);z-index:2000;">
-        <div style="background:#222;padding:16px 24px;border-radius:8px;color:#eee;min-width:340px;text-align:center;">
-            <div id="winnerText" style="font-size:20px;margin-bottom:12px;">Winner: -</div>
-            <div id="scoreBoard" style="font-size:14px;margin-bottom:12px;color:#ccc;white-space:pre-line;"></div>
-            <div id="rematchInfo" style="font-size:14px;margin-bottom:12px;color:#bbb;">Rematch: 0 / 0</div>
-            <div style="display:flex;gap:8px;justify-content:center;">
-                <button id="rematchBtn">Rematch</button>
-                <button id="menuBtn">Main Menu</button>
+
+    <div id="gameover">
+        <div class="modal">
+            <div id="winnerText">Winner: -</div>
+            <div id="scoreBoard"></div>
+            <div id="rematchInfo">Rematch: 0 / 0</div>
+            <div class="row" style="justify-content:center;">
+                <button id="rematchBtn" class="btn">Rematch</button>
+                <button id="menuBtn" class="btn secondary">Main Menu</button>
             </div>
         </div>
     </div>
-    <div id="game"></div>
+
     <script type="module" src="./src/main.js"></script>
 </body>
 

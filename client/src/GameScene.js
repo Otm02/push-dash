@@ -26,6 +26,7 @@ export class GameScene extends Phaser.Scene {
         this.timerText = null
         this.waveText = null
         this.hazardBinding = null
+        this.countdownText = null
     }
 
     preload() {
@@ -33,6 +34,11 @@ export class GameScene extends Phaser.Scene {
         this.load.image('knife', 'assets/knife.png')
         this.load.image('spike-warning', 'assets/spike warning.png')
         this.load.image('spike', 'assets/spike.png')
+        // Audio assets
+        this.load.audio('sfx-knife', 'assets/Knife.mp3')
+        this.load.audio('sfx-laser-death', 'assets/laser death.mp3')
+        this.load.audio('sfx-laser-wah', 'assets/laser wah.mp3')
+        this.load.audio('sfx-spike', 'assets/Spike.mp3')
     }
 
     create() {
@@ -72,21 +78,63 @@ export class GameScene extends Phaser.Scene {
 
         // Listen for death events to provide UX feedback and stop local control
         if (this.room && typeof this.room.onMessage === 'function') {
+            // Countdown before game start
+            this.room.onMessage('preStart', (payload) => {
+                // snap spawns so players appear before countdown
+                const spawns = payload?.spawns || {}
+                this.room.state.players.forEach((p, id) => {
+                    this._ensureSprite(id, p)
+                    const s = spawns[id] || { x: p.x, y: p.y }
+                    const rect = this.sprites.get(id)
+                    if (rect) { rect.x = s.x; rect.y = s.y }
+                    this.targets.set(id, { x: s.x, y: s.y })
+                    if (id === this.room.sessionId) this.selfServerPos = { x: s.x, y: s.y }
+                })
+                // Show 3-2-1 center overlay with glow
+                const centerX = this.scale.width / 2, centerY = this.scale.height / 2
+                if (this.countdownText) { this.countdownText.destroy(); this.countdownText = null }
+                this.countdownText = this.add.text(centerX, centerY, '3', {
+                    fontFamily: 'Orbitron, sans-serif', fontSize: '96px', color: '#ff2d55', fontStyle: 'bold'
+                }).setOrigin(0.5)
+                this.countdownText.setScrollFactor(0)
+                this.countdownText.setDepth(2000)
+                // sequence N..1 based on server payload.count (default 3)
+                const n = Math.max(1, Math.min(9, Number(payload?.count) || 3))
+                const seq = Array.from({ length: n }, (_, k) => String(n - k))
+                let i = 0
+                const tick = () => {
+                    if (!this.countdownText) return
+                    this.countdownText.setText(seq[i])
+                    this.countdownText.setScale(1)
+                    this.tweens.add({ targets: this.countdownText, scale: 1.25, alpha: 0.8, duration: 250, yoyo: true })
+                    i++
+                    if (i < seq.length) this.time.delayedCall(1000, tick)
+                }
+                tick()
+            })
             this.room.onMessage('playerDied', (payload) => {
                 if (!payload || !payload.id) return
+                // Play death SFX based on cause
+                try {
+                    if (payload.cause === 'dagger') {
+                        this.sound?.play('sfx-knife', { volume: 0.8 })
+                    } else if (payload.cause === 'laser') {
+                        this.sound?.play('sfx-laser-death', { volume: 0.8 })
+                    }
+                } catch { }
                 // Remove sprite immediately for responsiveness
                 const rect = this.sprites.get(payload.id)
                 if (rect) { rect.destroy(); this.sprites.delete(payload.id); this.targets.delete(payload.id) }
                 if (payload.id === this.room.sessionId) {
                     this.localDead = true
                     if (!this.deathText) {
-                        this.deathText = this.add.text(this.scale.width / 2, this.scale.height / 2, 'You Died', {
-                            fontSize: '48px',
-                            color: '#ff4d4d',
-                            fontStyle: 'bold',
+                        this.deathText = this.add.text(this.scale.width / 2, this.scale.height / 2, 'YOU DIED', {
+                            fontFamily: 'Orbitron, sans-serif', fontSize: '64px', color: '#ff1744', fontStyle: 'bold'
                         }).setOrigin(0.5)
                         this.deathText.setScrollFactor(0)
-                        this.deathText.setDepth(1000)
+                        this.deathText.setDepth(2000)
+                        this.deathText.alpha = 0
+                        this.tweens.add({ targets: this.deathText, alpha: 1, y: this.deathText.y - 8, duration: 280, ease: 'sine.out' })
                     }
                 }
             })
@@ -94,6 +142,9 @@ export class GameScene extends Phaser.Scene {
             this.room.onMessage('gameStart', (payload) => {
                 this.localDead = false
                 if (this.deathText) { this.deathText.destroy(); this.deathText = null }
+                if (this.countdownText) {
+                    this.tweens.add({ targets: this.countdownText, alpha: 0, duration: 200, onComplete: () => { this.countdownText?.destroy(); this.countdownText = null } })
+                }
                 // clear client-predicted dash state
                 this._localDash.active = false
                 // clear hazard visuals immediately; new hazards will stream in via state
@@ -139,19 +190,19 @@ export class GameScene extends Phaser.Scene {
                     this.phaseText.setScrollFactor(0)
                     this.phaseText.setDepth(1000)
                 }
-                this.phaseText.setText('Lobby: get ready...')
+                this.phaseText.setText(phase === 'starting' ? 'Get ready...' : 'Lobby: get ready...')
                 this.localDead = false
                 if (this.timerText) { this.timerText.destroy(); this.timerText = null }
                 if (this.waveText) { this.waveText.destroy(); this.waveText = null }
             } else {
                 if (this.phaseText) { this.phaseText.destroy(); this.phaseText = null }
                 if (!this.timerText) {
-                    this.timerText = this.add.text(8, 8, 'Time: 0s', { fontSize: '16px', color: '#eee' })
+                    this.timerText = this.add.text(8, 8, 'Time: 0s', { fontFamily: 'Orbitron, sans-serif', fontSize: '18px', color: '#64ffda' })
                     this.timerText.setScrollFactor(0)
                     this.timerText.setDepth(1000)
                 }
                 if (!this.waveText) {
-                    this.waveText = this.add.text(8, 28, 'Wave: 1', { fontSize: '16px', color: '#eee' })
+                    this.waveText = this.add.text(8, 28, 'Wave: 1', { fontFamily: 'Orbitron, sans-serif', fontSize: '18px', color: '#64ffda' })
                     this.waveText.setScrollFactor(0)
                     this.waveText.setDepth(1000)
                 }
@@ -360,8 +411,13 @@ export function launchGame(room) {
     const config = {
         type: Phaser.AUTO,
         parent: 'game',
-        width: 800,
-        height: 600,
+        scale: {
+            mode: Phaser.Scale.RESIZE,
+            parent: 'game',
+            autoCenter: Phaser.Scale.CENTER_BOTH,
+        },
+        width: '100%',
+        height: '100%',
         scene: [new GameScene(room)],
         backgroundColor: '#111',
     }

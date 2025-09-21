@@ -6,6 +6,8 @@ const __dirname = dirname(fileURLToPath(import.meta.url))
 
 export default defineConfig({
     root: __dirname,
+    // Allow hosting under a subpath like /game on athmanebenarous.com
+    base: process.env.VITE_BASE || '/game/',
     resolve: {
         alias: {
             '@shared': fileURLToPath(new URL('../shared', import.meta.url))

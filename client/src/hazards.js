@@ -11,13 +11,27 @@ export function bindHazards(scene, hazardMap) {
         if (hz.type === 'laser') {
             const gfx = node
             gfx.clear()
-            const colorTele = 0xffe082 // amber telegraph
-            const colorLethal = 0x02c4fa // cyan lethal
-            const alpha = hz.phase === 'telegraph' ? 0.25 : hz.phase === 'lethal' ? 0.9 : 0.15
-            gfx.fillStyle(hz.phase === 'lethal' ? colorLethal : colorTele, alpha)
+            const colorTele = 0xff8a80 // soft red telegraph
+            const colorLethal = 0xff1744 // bright red lethal
+            const targetAlpha = hz.phase === 'telegraph' ? 0.3 : hz.phase === 'lethal' ? 0.9 : 0.15
+            // Use node alpha to control opacity so we can animate spawn
+            gfx.setAlpha(1)
+            gfx.fillStyle(hz.phase === 'lethal' ? colorLethal : colorTele, 1)
             const rects = hz.rects || []
             for (const r of rects) {
                 gfx.fillRect(r.x - r.w / 2, r.y - r.h / 2, r.w, r.h)
+            }
+            // If alpha differs significantly, tween towards it for a brief pulse/spawn
+            if (typeof targetAlpha === 'number') {
+                const cur = node.alpha ?? 1
+                if (Math.abs((cur || 0) - targetAlpha) > 0.05) {
+                    try {
+                        scene.tweens.killTweensOf(node)
+                        scene.tweens.add({ targets: node, alpha: targetAlpha, duration: 220, ease: 'sine.out' })
+                    } catch { node.alpha = targetAlpha }
+                } else {
+                    node.alpha = targetAlpha
+                }
             }
         } else if (hz.type === 'dagger') {
             const sprite = node
@@ -38,11 +52,11 @@ export function bindHazards(scene, hazardMap) {
     const upsert = (id, json) => {
         let hz
         try { hz = JSON.parse(json) } catch { return }
-        // store previous for interp
+        // retrieve previous for transitions
         const prev = prevById.get(id)
-        prevById.set(id, { ...(prev || hz) })
 
         let node = nodesById.get(id)
+        const isNew = !nodesById.has(id)
         if (!node) {
             if (hz.type === 'laser') {
                 node = scene.add.graphics()
@@ -53,7 +67,20 @@ export function bindHazards(scene, hazardMap) {
             node.setDepth(0)
             nodesById.set(id, node)
         }
+        if (hz.type === 'laser' && isNew) {
+            node.alpha = 0
+            // Laser appears
+            try { scene.sound?.play('sfx-laser-wah', { volume: 0.7 }) } catch { }
+        }
+        // Spike appears (trap goes lethal)
+        if (hz.type === 'trap') {
+            if (prev && prev.phase !== 'lethal' && hz.phase === 'lethal') {
+                try { scene.sound?.play('sfx-spike', { volume: 0.8 }) } catch { }
+            }
+        }
         draw(node, hz)
+        // store current as previous for next update
+        prevById.set(id, { ...hz })
     }
 
     const remove = (id) => {

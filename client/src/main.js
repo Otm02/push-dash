@@ -98,9 +98,9 @@ function onConnected(room) {
     // Phase changes hide ready UI when running
     const handlePhase = () => {
         const phase = room.state.phase
-        if (phase === 'running') {
+        if (phase === 'running' || phase === 'starting') {
             if (hud) hud.style.display = 'none'
-            if (readyInfo) readyInfo.textContent = 'Match started!'
+            if (readyInfo) readyInfo.textContent = phase === 'starting' ? 'Starting...' : 'Match started!'
             if (gameoverEl) gameoverEl.style.display = 'none'
         } else if (phase === 'lobby') {
             if (hud) hud.style.display = 'block'

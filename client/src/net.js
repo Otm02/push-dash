@@ -1,13 +1,34 @@
 import { Client } from 'colyseus.js'
 
-// Use the Express/Colyseus server in dev (port 3000),
-// and same-origin in production (server also serves client build).
+// Flexible WS endpoint resolution:
+// - Dev: ws(s)://localhost:PORT (VITE_WS_PORT default 3000)
+// - Prod default: same-origin
+// - Overrides (highest precedence first):
+//   1) URL ?ws=wss://host[:port]
+//   2) window.PUSH_DASH_WS_URL
+//   3) import.meta.env.VITE_WS_URL
 const isDev = typeof import.meta !== 'undefined' && import.meta.env && import.meta.env.DEV
 const protocol = location.protocol === 'https:' ? 'wss' : 'ws'
 const host = location.hostname
 const devPort = (import.meta?.env?.VITE_WS_PORT) || 3000
-const port = isDev ? devPort : (location.port || '')
-const WS_ENDPOINT = `${protocol}://${host}${port ? `:${port}` : ''}`
+const urlWsParam = (() => { try { return new URLSearchParams(location.search).get('ws') } catch { return null } })()
+const globalWs = (typeof window !== 'undefined' && window.PUSH_DASH_WS_URL) ? String(window.PUSH_DASH_WS_URL) : null
+const envWs = (import.meta?.env?.VITE_WS_URL) || null
+
+let WS_ENDPOINT
+if (isDev) {
+    WS_ENDPOINT = `${protocol}://localhost:${devPort}`
+} else if (urlWsParam) {
+    WS_ENDPOINT = urlWsParam
+} else if (globalWs) {
+    WS_ENDPOINT = globalWs
+} else if (envWs) {
+    WS_ENDPOINT = envWs
+} else {
+    const port = (location.port || '')
+    WS_ENDPOINT = `${protocol}://${host}${port ? `:${port}` : ''}`
+}
+
 const client = new Client(WS_ENDPOINT)
 
 export async function createOrJoin(roomName = 'arena', options = {}) {
