@@ -1,28 +1,46 @@
 import colyseus from 'colyseus'
 const { Room } = colyseus
 import { Schema, MapSchema, ArraySchema, defineTypes } from '@colyseus/schema'
-import { ARENA_W, ARENA_H, MAX_SPEED, PLAYER_HALF, DASH_SPEED, DASH_DURATION_MS, DASH_COOLDOWN_MS, STUN_MS, RECOIL_MS, RECOIL_SPEED_SCALE, KNOCKBACK_SCALE } from '../../shared/constants.js'
+import { ARENA_W, ARENA_H, MAX_SPEED, PLAYER_HALF, DASH_SPEED, DASH_DURATION_MS, DASH_COOLDOWN_MS, STUN_MS, RECOIL_MS, RECOIL_SPEED_SCALE, KNOCKBACK_SCALE, TICK_MS } from '../../shared/constants.js'
 
 function clamp(v, min, max) { return v < min ? min : v > max ? max : v }
 const EPS = 1e-6
 
-// Returns u (0..step) of first intersection between segment P->P+dir*step and circle(center, r), or null
-function segmentCircleHit(px, py, dirx, diry, step, cx, cy, r) {
-    // dir assumed normalized
-    const mx = px - cx
-    const my = py - cy
-    // Quadratic: u^2 + 2(m·dir)u + (m·m - r^2) = 0
-    const b = 2 * (mx * dirx + my * diry)
-    const c = mx * mx + my * my - r * r
-    const disc = b * b - 4 * c
-    if (disc < 0) return null
-    const sq = Math.sqrt(disc)
-    const t1 = (-b - sq) / 2
-    const t2 = (-b + sq) / 2
-    // pick the earliest non-negative within segment length
-    if (t1 >= -EPS && t1 <= step + EPS) return Math.max(0, Math.min(step, t1))
-    if (t2 >= -EPS && t2 <= step + EPS) return Math.max(0, Math.min(step, t2))
-    return null
+// Ray vs AABB intersection for a segment P -> P + V (t in [0,1]) against box [min,max].
+// Returns tEntry in [0,1] for first contact or null if no hit.
+function rayVsAABB(px, py, vx, vy, minx, miny, maxx, maxy) {
+    let tmin = -Infinity
+    let tmax = Infinity
+
+    // X slabs
+    if (Math.abs(vx) < EPS) {
+        if (px < minx || px > maxx) return null
+    } else {
+        const tx1 = (minx - px) / vx
+        const tx2 = (maxx - px) / vx
+        const txmin = Math.min(tx1, tx2)
+        const txmax = Math.max(tx1, tx2)
+        tmin = Math.max(tmin, txmin)
+        tmax = Math.min(tmax, txmax)
+    }
+
+    // Y slabs
+    if (Math.abs(vy) < EPS) {
+        if (py < miny || py > maxy) return null
+    } else {
+        const ty1 = (miny - py) / vy
+        const ty2 = (maxy - py) / vy
+        const tymin = Math.min(ty1, ty2)
+        const tymax = Math.max(ty1, ty2)
+        tmin = Math.max(tmin, tymin)
+        tmax = Math.min(tmax, tymax)
+    }
+
+    if (tmax < tmin) return null
+    // We only care about intersections along the segment [0,1]
+    const tEntry = tmin
+    if (tEntry < -EPS || tEntry > 1 + EPS) return null
+    return Math.max(0, Math.min(1, tEntry))
 }
 
 class Player extends Schema {
@@ -94,8 +112,8 @@ export class ArenaRoom extends Room {
             this.inputs.set(client.sessionId, { dx, dy, dashPressed })
         })
 
-        // simulation tick: 20 Hz movement integration
-        const tickMs = 50
+        // simulation tick: movement integration
+        const tickMs = TICK_MS
         this.clock.setInterval(() => {
             const dt = tickMs / 1000
             const now = Date.now()
@@ -121,22 +139,28 @@ export class ArenaRoom extends Room {
                 let movedByDash = false
                 if (dstate && dstate.active) {
                     const step = DASH_SPEED * dt
-                    // Edge-only collision test: segment vs circle (other player's radius = 2*PLAYER_HALF because centers distance must be >= 2*half)
-                    let hitInfo = null
+                    const vx = dstate.dir.x * step
+                    const vy = dstate.dir.y * step
+                    // Swept AABB using Minkowski sum (expand target by attacker's half size)
+                    let bestT = null
                     let hitTarget = null
                     this.state.players.forEach((op, oid) => {
                         if (oid === id) return
-                        const u = segmentCircleHit(p.x, p.y, dstate.dir.x, dstate.dir.y, step, op.x, op.y, PLAYER_HALF * 2)
-                        if (u !== null && (hitInfo === null || u < hitInfo.u)) {
-                            hitInfo = { u }
+                        const minx = op.x - (PLAYER_HALF + PLAYER_HALF)
+                        const maxx = op.x + (PLAYER_HALF + PLAYER_HALF)
+                        const miny = op.y - (PLAYER_HALF + PLAYER_HALF)
+                        const maxy = op.y + (PLAYER_HALF + PLAYER_HALF)
+                        const t = rayVsAABB(p.x, p.y, vx, vy, minx, miny, maxx, maxy)
+                        if (t !== null && (bestT === null || t < bestT)) {
+                            bestT = t
                             hitTarget = op
                         }
                     })
 
-                    if (hitTarget && hitInfo) {
-                        // move attacker to contact point
-                        p.x = clamp(p.x + dstate.dir.x * hitInfo.u, PLAYER_HALF, ARENA_W - PLAYER_HALF)
-                        p.y = clamp(p.y + dstate.dir.y * hitInfo.u, PLAYER_HALF, ARENA_H - PLAYER_HALF)
+                    if (hitTarget !== null && bestT !== null) {
+                        // Move attacker to contact point (edge-to-edge)
+                        p.x = clamp(p.x + vx * bestT, PLAYER_HALF, ARENA_W - PLAYER_HALF)
+                        p.y = clamp(p.y + vy * bestT, PLAYER_HALF, ARENA_H - PLAYER_HALF)
                         dstate.active = false
                         const remainTime = Math.max(0, dstate.endAt - now) / 1000
                         const remainDist = remainTime * DASH_SPEED
@@ -148,8 +172,8 @@ export class ArenaRoom extends Room {
                         this.recoilUntil.set(id, now + RECOIL_MS)
                     } else {
                         // continue dash full step
-                        p.x = clamp(p.x + dstate.dir.x * step, PLAYER_HALF, ARENA_W - PLAYER_HALF)
-                        p.y = clamp(p.y + dstate.dir.y * step, PLAYER_HALF, ARENA_H - PLAYER_HALF)
+                        p.x = clamp(p.x + vx, PLAYER_HALF, ARENA_W - PLAYER_HALF)
+                        p.y = clamp(p.y + vy, PLAYER_HALF, ARENA_H - PLAYER_HALF)
                     }
                     if (now >= dstate.endAt) {
                         dstate.active = false
@@ -168,8 +192,7 @@ export class ArenaRoom extends Room {
                     }
                 }
             })
-            // Post-move separation: prevent overlapping edges between players
-            // Resolve minimal push apart along the line connecting centers if centers are closer than 2*PLAYER_HALF
+            // Post-move separation: axis-aligned resolution for overlapping AABBs (squares)
             const ids = Array.from(this.state.players.keys())
             for (let i = 0; i < ids.length; i++) {
                 for (let j = i + 1; j < ids.length; j++) {
@@ -177,17 +200,20 @@ export class ArenaRoom extends Room {
                     const b = this.state.players.get(ids[j])
                     const dx = b.x - a.x
                     const dy = b.y - a.y
-                    const dist = Math.hypot(dx, dy)
                     const minDist = PLAYER_HALF * 2
-                    if (dist > 0 && dist < minDist - EPS) {
-                        const overlap = minDist - dist
-                        const nx = dx / dist
-                        const ny = dy / dist
-                        const half = overlap / 2
-                        a.x = clamp(a.x - nx * half, PLAYER_HALF, ARENA_W - PLAYER_HALF)
-                        a.y = clamp(a.y - ny * half, PLAYER_HALF, ARENA_H - PLAYER_HALF)
-                        b.x = clamp(b.x + nx * half, PLAYER_HALF, ARENA_W - PLAYER_HALF)
-                        b.y = clamp(b.y + ny * half, PLAYER_HALF, ARENA_H - PLAYER_HALF)
+                    const overlapX = minDist - Math.abs(dx)
+                    const overlapY = minDist - Math.abs(dy)
+                    if (overlapX > 0 && overlapY > 0) {
+                        // push along the axis of least penetration
+                        if (overlapX < overlapY) {
+                            const push = overlapX / 2 * Math.sign(dx || 1)
+                            a.x = clamp(a.x - push, PLAYER_HALF, ARENA_W - PLAYER_HALF)
+                            b.x = clamp(b.x + push, PLAYER_HALF, ARENA_W - PLAYER_HALF)
+                        } else {
+                            const push = overlapY / 2 * Math.sign(dy || 1)
+                            a.y = clamp(a.y - push, PLAYER_HALF, ARENA_H - PLAYER_HALF)
+                            b.y = clamp(b.y + push, PLAYER_HALF, ARENA_H - PLAYER_HALF)
+                        }
                     }
                 }
             }

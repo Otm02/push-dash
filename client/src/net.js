@@ -11,11 +11,6 @@ const WS_ENDPOINT = `${protocol}://${host}${port ? `:${port}` : ''}`
 const client = new Client(WS_ENDPOINT)
 
 export async function createOrJoin(roomName = 'arena', options = {}) {
-    const urlParams = new URLSearchParams(location.search)
-    const queryRoomId = urlParams.get('roomId')
-    if (queryRoomId) {
-        return await joinById(queryRoomId)
-    }
     try {
         return await client.joinOrCreate(roomName, options)
     } catch (err) {

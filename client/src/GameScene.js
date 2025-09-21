@@ -1,11 +1,11 @@
 import Phaser from 'phaser'
-import { ARENA_W, ARENA_H, MAX_SPEED, PLAYER_HALF } from '@shared/constants.js'
+import { ARENA_W, ARENA_H, MAX_SPEED, PLAYER_HALF, PLAYER_SIZE, TICK_MS } from '@shared/constants.js'
 
 const SELF_COLOR = 0x4caf50
 const OTHER_COLOR = 0x03a9f4
 const BG_COLOR = 0x111111
 const BOUNDS_COLOR = 0xffffff
-const SQUARE_SIZE = 16
+const SQUARE_SIZE = PLAYER_SIZE
 
 export class GameScene extends Phaser.Scene {
     constructor(room) {
@@ -15,7 +15,7 @@ export class GameScene extends Phaser.Scene {
         this.targets = new Map() // id -> {x,y}
         this.selfServerPos = null
         this._sendAcc = 0
-        this._sendRateMs = 50 // 20 Hz
+        this._sendRateMs = TICK_MS
         this._otherLerp = 0.2
         this._selfCorrection = 0.08
     }
@@ -92,6 +92,10 @@ export class GameScene extends Phaser.Scene {
         const rect = this.add.rectangle(player.x, player.y, SQUARE_SIZE, SQUARE_SIZE, color)
         rect.setOrigin(0.5)
         this.sprites.set(id, rect)
+
+        // Ensure sprite depth
+        rect.setDepth(1)
+
         this.targets.set(id, { x: player.x, y: player.y })
         if (id === this.room.sessionId) {
             this.selfServerPos = { x: player.x, y: player.y }
@@ -155,6 +159,7 @@ export class GameScene extends Phaser.Scene {
                 selfRect.x += (this.selfServerPos.x - selfRect.x) * this._selfCorrection
                 selfRect.y += (this.selfServerPos.y - selfRect.y) * this._selfCorrection
             }
+            // No separate hitbox graphic; sprite position is authoritative
             // Throttled input send
             this._sendAcc += delta
             if (this._sendAcc >= this._sendRateMs) {
@@ -172,6 +177,7 @@ export class GameScene extends Phaser.Scene {
             if (!t) return
             rect.x += (t.x - rect.x) * this._otherLerp
             rect.y += (t.y - rect.y) * this._otherLerp
+            // No separate hitbox graphic
         })
     }
 
@@ -181,6 +187,7 @@ export class GameScene extends Phaser.Scene {
             rect.destroy()
             this.sprites.delete(id)
         }
+        // No separate hitbox graphic to remove
     }
 }
 

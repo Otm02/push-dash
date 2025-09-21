@@ -4,20 +4,8 @@ import { launchGame } from './GameScene.js'
 const lobbyEl = document.getElementById('lobby')
 const statusEl = document.getElementById('status')
 
-async function startFromQuery() {
-    const params = new URLSearchParams(location.search)
-    const roomId = params.get('roomId')
-    if (roomId) {
-        try {
-            setStatus('Joining room...')
-            const room = await joinById(roomId)
-            onConnected(room)
-        } catch (e) {
-            setStatus('Join failed')
-            console.error(e)
-        }
-    }
-}
+// Note: We intentionally ignore any roomId in the URL on page load.
+// Only the explicit "Join by ID" action should consider a room ID.
 
 function setStatus(msg) {
     if (statusEl) statusEl.textContent = msg || ''
@@ -67,7 +55,7 @@ async function onJoinById() {
 function boot() {
     document.getElementById('quickplay')?.addEventListener('click', onQuickplay)
     document.getElementById('joinById')?.addEventListener('click', onJoinById)
-    startFromQuery()
+    // No auto-join from URL to avoid stale IDs breaking Quickplay
 }
 
 boot()
