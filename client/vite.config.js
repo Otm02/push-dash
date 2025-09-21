@@ -7,7 +7,7 @@ const __dirname = dirname(fileURLToPath(import.meta.url))
 export default defineConfig({
     root: __dirname,
     // Allow hosting under a subpath like /push-dash on athmanebenarous.com
-    base: process.env.VITE_BASE || '/push-dash/',
+    base: process.env.VITE_BASE || '/',
     resolve: {
         alias: {
             '@shared': fileURLToPath(new URL('../shared', import.meta.url))
