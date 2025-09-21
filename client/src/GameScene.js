@@ -1,5 +1,6 @@
 import Phaser from 'phaser'
 import { ARENA_W, ARENA_H, MAX_SPEED, PLAYER_HALF, PLAYER_SIZE, TICK_MS } from '@shared/constants.js'
+import { bindHazards } from './hazards.js'
 
 const SELF_COLOR = 0x4caf50
 const OTHER_COLOR = 0x03a9f4
@@ -18,9 +19,16 @@ export class GameScene extends Phaser.Scene {
         this._sendRateMs = TICK_MS
         this._otherLerp = 0.2
         this._selfCorrection = 0.08
+        this.localDead = false
+        this.deathText = null
     }
 
-    preload() { }
+    preload() {
+        // Hazard assets
+        this.load.image('knife', 'assets/knife.png')
+        this.load.image('spike-warning', 'assets/spike warning.png')
+        this.load.image('spike', 'assets/spike.png')
+    }
 
     create() {
         const cam = this.cameras.main
@@ -54,6 +62,27 @@ export class GameScene extends Phaser.Scene {
 
         // Hook to state changes to create/update/destroy player squares
         this._bindState()
+        // Render hazards from state deterministically
+        bindHazards(this, this.room.state.hazards)
+
+        // Listen for death events to provide UX feedback and stop local control
+        if (this.room && typeof this.room.onMessage === 'function') {
+            this.room.onMessage('playerDied', (payload) => {
+                if (!payload || !payload.id) return
+                if (payload.id === this.room.sessionId) {
+                    this.localDead = true
+                    if (!this.deathText) {
+                        this.deathText = this.add.text(this.scale.width / 2, this.scale.height / 2, 'You Died', {
+                            fontSize: '48px',
+                            color: '#ff4d4d',
+                            fontStyle: 'bold',
+                        }).setOrigin(0.5)
+                        this.deathText.setScrollFactor(0)
+                        this.deathText.setDepth(1000)
+                    }
+                }
+            })
+        }
 
         // Input keys
         this.keys = this.input.keyboard.addKeys({
@@ -125,7 +154,7 @@ export class GameScene extends Phaser.Scene {
         const dt = delta / 1000
         const selfId = this.room.sessionId
         const selfRect = this.sprites.get(selfId)
-        if (selfRect) {
+        if (selfRect && !this.localDead) {
             // Immediate local movement (prediction)
             let dx = 0, dy = 0
             if (this.keys.w.isDown) dy -= 1

@@ -2,6 +2,8 @@ import colyseus from 'colyseus'
 const { Room } = colyseus
 import { Schema, MapSchema, ArraySchema, defineTypes } from '@colyseus/schema'
 import { ARENA_W, ARENA_H, MAX_SPEED, PLAYER_HALF, DASH_SPEED, DASH_DURATION_MS, DASH_COOLDOWN_MS, STUN_MS, RECOIL_MS, RECOIL_SPEED_SCALE, KNOCKBACK_SCALE, TICK_MS } from '../../shared/constants.js'
+import { makeHazards, stepHazards, resolvePlayerHazard, serializeHazards } from '../game/hazards.js'
+import { resolveDeaths } from '../game/logic.js'
 
 function clamp(v, min, max) { return v < min ? min : v > max ? max : v }
 const EPS = 1e-6
@@ -53,6 +55,9 @@ class Player extends Schema {
         this.color = 0
         this.stunMs = 0
         this.cooldownMs = 0
+        this.vx = 0
+        this.vy = 0
+        this.alive = true
     }
 }
 defineTypes(Player, {
@@ -63,13 +68,16 @@ defineTypes(Player, {
     color: 'number',
     stunMs: 'number',
     cooldownMs: 'number',
+    vx: 'number',
+    vy: 'number',
+    alive: 'boolean',
 })
 
 class ArenaState extends Schema {
     constructor() {
         super()
         this.players = new MapSchema()
-        this.hazards = new ArraySchema()
+        this.hazards = new MapSchema()
         this.phase = 'lobby' // lobby | running | gameover
         this.seed = Math.floor(Math.random() * 1e9)
         this.roundTimer = 0
@@ -77,7 +85,7 @@ class ArenaState extends Schema {
 }
 defineTypes(ArenaState, {
     players: { map: Player },
-    hazards: ['string'],
+    hazards: { map: 'string' },
     phase: 'string',
     seed: 'number',
     roundTimer: 'number',
@@ -98,6 +106,12 @@ export class ArenaRoom extends Room {
         // dash/recoil ephemeral state
         this.dash = new Map() // id -> { active, dir:{x,y}, endAt:number }
         this.recoilUntil = new Map() // id -> timestamp
+        // Hazards controller (server-authoritative)
+        this.haz = makeHazards(0, {
+            seed: this.state.seed,
+            arena: { w: ARENA_W, h: ARENA_H },
+            getPlayers: () => Array.from(this.state.players.values())
+        })
         this.clock.setInterval(() => {
             this.state.roundTimer += 1
         }, 1000)
@@ -117,8 +131,17 @@ export class ArenaRoom extends Room {
         this.clock.setInterval(() => {
             const dt = tickMs / 1000
             const now = Date.now()
+            // Step hazards and sync into state
+            stepHazards(this.haz, dt)
+            this._syncHazardsToState()
             this.state.players.forEach((p, id) => {
                 const inp = this.inputs.get(id) || { dx: 0, dy: 0, dashPressed: false }
+
+                if (!p.alive) {
+                    // Ensure they remain frozen
+                    p.vx = 0; p.vy = 0
+                    return
+                }
 
                 // decrement timers
                 if (p.stunMs > 0) p.stunMs = Math.max(0, p.stunMs - tickMs)
@@ -187,8 +210,12 @@ export class ArenaRoom extends Room {
                         let speed = MAX_SPEED
                         const recoilUntil = this.recoilUntil.get(id) || 0
                         if (now < recoilUntil) speed *= RECOIL_SPEED_SCALE
-                        p.x = clamp(p.x + inp.dx * speed * dt, PLAYER_HALF, ARENA_W - PLAYER_HALF)
-                        p.y = clamp(p.y + inp.dy * speed * dt, PLAYER_HALF, ARENA_H - PLAYER_HALF)
+                        const mvx = inp.dx * speed
+                        const mvy = inp.dy * speed
+                        p.vx = mvx
+                        p.vy = mvy
+                        p.x = clamp(p.x + mvx * dt, PLAYER_HALF, ARENA_W - PLAYER_HALF)
+                        p.y = clamp(p.y + mvy * dt, PLAYER_HALF, ARENA_H - PLAYER_HALF)
                     }
                 }
             })
@@ -217,6 +244,11 @@ export class ArenaRoom extends Room {
                     }
                 }
             }
+
+            // Allow overlaps: no pushback resolution vs hazards; death logic will handle kills
+
+            // Death resolution (OOB, lasers, daggers, traps)
+            resolveDeaths(this, this.haz)
         }, tickMs)
         console.log(`[ArenaRoom] created with options`, options)
     }
@@ -247,5 +279,18 @@ export class ArenaRoom extends Room {
 
     onDispose() {
         console.log(`[ArenaRoom] disposed`)
+    }
+
+    _syncHazardsToState() {
+        // Mirror server hazards into schema map as strings for deterministic client display
+        const ser = serializeHazards(this.haz)
+        // Remove stale
+        const toDelete = []
+        this.state.hazards.forEach((_v, k) => { if (!ser.has(k)) toDelete.push(k) })
+        for (const k of toDelete) this.state.hazards.delete(k)
+        // Upsert current
+        for (const [k, v] of ser) {
+            this.state.hazards.set(k, v)
+        }
     }
 }

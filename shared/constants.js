@@ -17,3 +17,9 @@ export const KNOCKBACK_SCALE = 0.7 // portion of remaining dash distance applied
 // Global simulation tickrate (ms per tick). Server sim and client input send throttle should match.
 export const TICK_MS = 50
 export const TICK_HZ = 1000 / TICK_MS
+
+// Hazards tuning
+// Dagger spawn/despawn margin outside arena (pixels)
+export const DAGGER_MARGIN = 48
+// Trap 'off' phase duration before despawn (ms)
+export const TRAP_OFF_MS = 1000
