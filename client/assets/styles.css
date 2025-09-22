@@ -1,0 +1,334 @@
+/* PUSH//DASH – Neon Arena UI (2025) */
+
+@import url('https://fonts.googleapis.com/css2?family=Orbitron:wght@400;600;800&family=Inter:wght@300;400;600&display=swap');
+
+:root {
+    --bg-0: #0a0b10;
+    --bg-1: #0e1220;
+    --panel: rgba(20, 24, 40, 0.6);
+    --panel-strong: rgba(20, 24, 40, 0.85);
+    --text: #e6e8ff;
+    --muted: #a0a6c3;
+    --accent: #00e5ff;
+    --accent-2: #ff2d55;
+    --glow: rgba(0, 229, 255, 0.6);
+    --radius: 14px;
+    --shadow: 0 6px 30px rgba(0, 0, 0, 0.4);
+}
+
+* {
+    box-sizing: border-box;
+}
+
+html,
+body {
+    height: 100%;
+}
+
+body {
+    margin: 0;
+    font-family: Inter, system-ui, -apple-system, Segoe UI, Roboto, Ubuntu, 'Helvetica Neue', Arial, 'Noto Sans', 'Apple Color Emoji', 'Segoe UI Emoji', 'Segoe UI Symbol', sans-serif;
+    color: var(--text);
+    background: radial-gradient(1200px 800px at 20% 0%, #111426 0%, var(--bg-0) 40%),
+        radial-gradient(1000px 1000px at 100% 100%, #0f0f24 0%, var(--bg-0) 60%);
+    overflow-x: hidden;
+}
+
+/* Background grid + scanlines */
+.bg {
+    position: fixed;
+    inset: 0;
+    pointer-events: none;
+    z-index: 0;
+}
+
+.bg::before,
+.bg::after {
+    content: "";
+    position: absolute;
+    inset: -200px;
+}
+
+.bg::before {
+    background-image: linear-gradient(rgba(255, 255, 255, 0.03) 1px, transparent 1px),
+        linear-gradient(90deg, rgba(255, 255, 255, 0.03) 1px, transparent 1px);
+    background-size: 40px 40px, 40px 40px;
+    animation: pan 30s linear infinite;
+}
+
+.bg::after {
+    background: repeating-linear-gradient(transparent, transparent 3px, rgba(255, 255, 255, 0.02) 4px);
+    mix-blend-mode: overlay;
+}
+
+@keyframes pan {
+    from {
+        transform: translateY(0);
+    }
+
+    to {
+        transform: translateY(-40px);
+    }
+}
+
+/* Brand bar */
+/* brand removed per request */
+
+/* Main layout */
+.shell {
+    position: relative;
+    z-index: 1;
+    min-height: 100%;
+    display: grid;
+    gap: 16px;
+    padding: 24px;
+}
+
+.card {
+    width: min(1200px, 94vw);
+    margin: 0 auto;
+    display: grid;
+    grid-template-columns: 0.8fr 1.2fr;
+    gap: 16px;
+    background: var(--panel);
+    border: 1px solid rgba(255, 255, 255, 0.08);
+    border-radius: var(--radius);
+    box-shadow: var(--shadow);
+    backdrop-filter: blur(10px) saturate(110%);
+    padding: 18px;
+}
+
+.leftStack {
+    display: grid;
+    gap: 12px;
+    align-content: start;
+}
+
+/* Left column stacks hero, join panel, and in-panel HUD */
+.leftStack {
+    display: grid;
+    gap: 12px;
+    align-content: start;
+}
+
+/* Right column hosts the arena */
+.rightArena {
+    display: grid;
+    align-content: start;
+}
+
+/* removed duplicate sizing; see unified #game rules below */
+
+.hero {
+    padding: 18px 20px;
+    border-radius: 12px;
+    position: relative;
+    background: linear-gradient(180deg, rgba(0, 229, 255, 0.08), rgba(255, 45, 85, 0.05));
+}
+
+.hero h1 {
+    font-family: Orbitron, Inter, sans-serif;
+    font-size: clamp(28px, 4.2vw, 48px);
+    margin: 0 0 8px;
+}
+
+.hero h1 .sep {
+    color: var(--accent-2);
+    text-shadow: 0 0 14px rgba(255, 45, 85, 0.6);
+}
+
+.hero p {
+    margin: 4px 0 14px;
+    color: var(--muted);
+}
+
+.cta-row {
+    display: flex;
+    gap: 10px;
+    align-items: center;
+    flex-wrap: wrap;
+}
+
+.panel {
+    background: var(--panel-strong);
+    border: 1px solid rgba(255, 255, 255, 0.08);
+    border-radius: 12px;
+    padding: 14px;
+    height: 100%;
+    display: grid;
+    gap: 8px;
+}
+
+.panel h3 {
+    margin: 0 0 6px;
+    font-weight: 600;
+    color: var(--text);
+}
+
+/* Inputs & buttons */
+.row {
+    display: flex;
+    gap: 8px;
+    flex-wrap: wrap;
+    align-items: center;
+}
+
+.input,
+input[type="text"],
+input[type="search"] {
+    appearance: none;
+    outline: none;
+    border: 1px solid rgba(255, 255, 255, 0.12);
+    background: rgba(255, 255, 255, 0.06);
+    color: var(--text);
+    padding: 10px 12px;
+    border-radius: 10px;
+    min-width: 180px;
+}
+
+.btn {
+    appearance: none;
+    border: 1px solid rgba(0, 229, 255, 0.5);
+    color: var(--text);
+    background: linear-gradient(180deg, rgba(0, 229, 255, 0.18), rgba(0, 229, 255, 0.06));
+    padding: 10px 14px;
+    border-radius: 10px;
+    cursor: pointer;
+    font-weight: 600;
+    transition: transform 0.12s ease, box-shadow 0.12s ease, background 0.12s ease;
+    text-shadow: 0 0 10px var(--glow);
+}
+
+.btn:hover {
+    transform: translateY(-1px);
+    box-shadow: 0 8px 22px rgba(0, 229, 255, 0.25);
+}
+
+.btn:active {
+    transform: translateY(0);
+}
+
+.btn.secondary {
+    border-color: rgba(255, 45, 85, 0.6);
+    background: linear-gradient(180deg, rgba(255, 45, 85, 0.18), rgba(255, 45, 85, 0.06));
+    text-shadow: 0 0 10px rgba(255, 45, 85, 0.5);
+}
+
+.hint {
+    color: var(--muted);
+    font-size: 12px;
+}
+
+/* Status/HUD */
+#hud {
+    display: none;
+    background: var(--panel-strong);
+    border: 1px solid rgba(255, 255, 255, 0.08);
+    padding: 8px 10px;
+    border-radius: 12px;
+    box-shadow: var(--shadow);
+}
+
+/* Isolated Ready button and status panel layout */
+.readyOnly {
+    display: flex;
+    justify-content: flex-start;
+    margin-bottom: 8px;
+}
+
+.statusPanel {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+}
+
+#readyBtn {
+    margin-right: 8px;
+}
+
+#readyBtn.btn:disabled {
+    opacity: 0.6;
+}
+
+#readyInfo {
+    color: var(--muted);
+    margin-right: 10px;
+}
+
+#scoreInfo {
+    color: var(--text);
+    font-weight: 600;
+}
+
+/* Game container */
+.rightArena {
+    display: grid;
+}
+
+#game {
+    width: 100%;
+    height: min(78vh, 820px);
+    border-radius: 14px;
+    overflow: hidden;
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    box-shadow: var(--shadow);
+}
+
+/* Gameover modal */
+#gameover {
+    position: fixed;
+    inset: 0;
+    display: none;
+    align-items: center;
+    justify-content: center;
+    background: rgba(3, 6, 14, 0.55);
+    backdrop-filter: blur(6px);
+    z-index: 20;
+}
+
+#gameover .modal {
+    background: var(--panel-strong);
+    padding: 18px 22px;
+    border-radius: 14px;
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    box-shadow: 0 10px 40px rgba(0, 0, 0, 0.55);
+    min-width: 360px;
+    max-width: 92vw;
+    text-align: center;
+}
+
+#winnerText {
+    font-family: Orbitron, Inter, sans-serif;
+    font-weight: 800;
+    font-size: 22px;
+    margin-bottom: 10px;
+    text-shadow: 0 0 12px var(--glow);
+}
+
+#scoreBoard {
+    font-size: 14px;
+    margin-bottom: 10px;
+    color: var(--muted);
+    white-space: pre-line;
+}
+
+#rematchInfo {
+    font-size: 13px;
+    margin-bottom: 12px;
+    color: var(--muted);
+}
+
+/* Lobby layout overrides for ID-based elements (compat) */
+#lobby {
+    display: grid;
+    gap: 12px;
+    align-items: start;
+    grid-template-columns: 1fr;
+}
+
+/* Responsive */
+@media (max-width: 880px) {
+    .card {
+        grid-template-columns: 1fr;
+    }
+}

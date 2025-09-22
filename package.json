@@ -1,0 +1,32 @@
+{
+  "name": "push-dash",
+  "private": true,
+  "version": "0.1.0",
+  "description": "Push Dash monorepo: Express + Colyseus server and Vite + Phaser client.",
+  "type": "module",
+  "scripts": {
+    "dev": "concurrently \"npm:dev:server\" \"npm:dev:client\"",
+    "dev:server": "nodemon server/index.js",
+    "dev:client": "vite --config client/vite.config.js",
+    "build": "vite build --config client/vite.config.js",
+    "start": "node server/index.js",
+    "electron": "electron ./electron/main.js",
+    "package:win": "npm run build && cross-env PUSH_DASH_WS_URL=%PUSH_DASH_WS_URL% electron-builder --win --config electron-builder.json"
+  },
+  "devDependencies": {
+    "concurrently": "^8.2.2",
+    "nodemon": "^3.1.10",
+    "vite": "^5.4.20",
+    "electron": "^31.3.1",
+    "electron-builder": "^25.0.5",
+    "cross-env": "^7.0.3"
+  },
+  "dependencies": {
+    "@colyseus/schema": "^2.0.37",
+    "colyseus": "^0.15.57",
+    "colyseus.js": "^0.15.28",
+    "cors": "^2.8.5",
+    "express": "^4.21.2",
+    "phaser": "^3.90.0"
+  }
+}

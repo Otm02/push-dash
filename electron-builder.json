@@ -1,0 +1,19 @@
+{
+    "appId": "com.athmanebenarous.pushdash",
+    "productName": "PUSH DASH",
+    "files": [
+        "client/dist/**",
+        "electron/**"
+    ],
+    "asar": true,
+    "win": {
+        "target": [
+            "nsis"
+        ],
+        "artifactName": "push-dash-setup-${version}.exe"
+    },
+    "extraMetadata": {
+        "type": "module",
+        "main": "electron/main.js"
+    }
+}
